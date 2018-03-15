@@ -1,0 +1,268 @@
+;
+;	 MACRO-11  example.
+;
+	.MCall	.Exit, .Print, .TTYIN,.TTINR
+	
+
+; Экран 320x264
+;
+
+.MACRO	PUSH x
+	MOV	x,-(SP)
+.ENDM
+
+.MACRO	POP x
+	MOV	(SP)+,x
+.ENDM
+
+START:
+	BIS     #010000, @#44	; Disable Ctrl-C
+	MOV	#MENUSC, R1	
+	CALL	PRINT
+
+	CALL	PAUSE
+
+	CALL	SETTBL		; SET TABLE
+
+S:	MOV	#level01, R5
+	MOV	ROOM,	R0
+	ROL	R0	
+	ADD	ROOMSTART(R0),R5
+		
+	CALL	DRAWLEVEl
+
+SS:	CALL	WTKEY
+	CMPB	R0, #15		; Enter?
+	BEQ	PL
+	
+	BR	SS
+
+PL:	INC	ROOM
+	CMP	ROOM,#5.
+	BEQ	PL01
+	BR	S
+PL01:	MOVB	#0,ROOM
+	BR	S
+				
+	.Exit
+
+DRAWLEVEl:
+	MOV	#3,	R0	;Height
+	MOV	#0,	R2
+	MOV	#0,	R3
+	
+
+DL01:	MOV	#10.,	R1  	;Width
+DL02:	PUSH	R0
+	PUSH	R1
+	PUSH	R2
+	PUSH	R3
+	PUSH	R4
+	PUSH	R5
+
+	MOV	R2,	R0	;x
+	MOV	R3,	R1  	;y
+	MOV	#4.,	R2	;width
+	MOV	#80.,	R3	;height
+		
+	MOVB	(R5)+,	R4
+	ROL	R4
+	MOV	BLOCK(R4),R4
+	
+		
+	
+	CALL	DRAWSPRITE 
+
+	POP	R5
+	POP	R4
+	POP	R3
+	POP	R2
+	POP	R1
+	POP	R0
+
+	ADD	#4,R2	
+	INC	R5
+	SOB	R1,DL02
+
+	MOV	#0,R2
+	ADD	#80.,R3
+	SOB	R0,DL01
+
+	RETURN
+
+	
+
+
+; Отрисовать прямоугольник  R0-x, R1-y, R2-width, R3-height, R4-color
+BOX: 
+	ROL	R1
+	MOV	DSPSTART(R1),R5	; y
+	ADD	R0,	R5 	; x R5-старт отрисовки
+
+	MOV	#80.,	R0
+	SUB	R2,	R0
+	MOV	R2,	R1
+
+S02:	MOV	R1,	R2
+S01:	MOV	R5, @#176640
+	MOV	R4, @#176642
+	INC	R5	
+	DEC	R2
+	BNE	S01
+
+	ADD	R0,	R5
+	DEC	R3
+	BNE	S02
+	
+	RETURN
+	
+; Отрисовать прямоугольник  R0-x, R1-y, R2-width, R3-height, R4-картинка
+DRAWSPRITE: 
+	ROL	R1
+	MOV	DSPSTART(R1),R5	; y
+	ADD	R0,	R5 	; x R5-старт отрисовки
+
+	MOV	#80.,	R0
+	SUB	R2,	R0
+	MOV	R2,	R1
+
+SP02:	MOV	R1,	R2
+SP01:	MOV	R5, @#176640
+	MOV	(R4)+, @#176642
+	INC	R5		
+	SOB	R2,SP01
+
+	ADD	R0,	R5
+	SOB	R3,SP02
+	
+	RETURN
+
+
+
+; Подпрограмма: Печать строки: R1 = адрес строки, строка завершается 0; портит R0
+PRINT:
+PR0:	MOVB	(R1)+, R0	; Конец строки?
+	BEQ	PR2		; да => завершаем
+PR1:	TSTB	@#177564	; Источник канала 0 готов?
+	BPL	PR1		; нет => ждём
+	MOV	R0, @#177566	; передаём символ в канал 0
+	BR	PR0
+PR2:	RETURN
+
+;Подпрограмма: пауза после очистки экрана чтобы ПП закончил работу
+PAUSE:	; Pause to let PPU finish the previous commands
+	MOV	#177777, R5
+PAUSE0:	NOP
+	SOB	R5, PAUSE0
+	RETURN
+
+
+SETTBL:
+	MOV	#100000,   R0
+	MOV	#000440,   R1
+	MOV     #DSPSTART, R2
+SET1:	MOV     R0,(R2)+
+	ADD     #80.,R0
+        SOB     R1, SET1
+
+	MOV	#0,	R0
+	MOV	#40.,   R1
+	MOV     #ROOMSTART, R2
+SET2:	MOV     R0,(R2)+
+	ADD     #30.,R0
+        SOB     R1, SET2
+
+        RETURN
+
+
+KBDTST:
+	.TTINR		
+	BCS	KBDTST
+
+	CMP	R0, KBDR
+	BNE	RIGHT			
+
+	CMP	R0, KBDL
+	BNE	LEFT	
+	
+	BR	KBDTST
+RIGHT:
+	INC	ROOM
+	BR	KBDEND
+
+LEFT:
+	DEC	ROOM
+	BR	KBDEND
+
+KBDEND:
+	RETURN
+
+
+WTKEY:	.TTYIN			; символ в R0
+	CMPB	R0, #33
+	BNE	2$
+	.TTYIN
+	BIS	#15400,R0	; #33 в верхний байт
+2$:	RETURN
+	
+	
+Mes:	.ASCIZ	\Hello 2017\
+
+GAMESC:	; Строка подготовки игрового экрана
+	.BYTE	33,246,62	; Формат экрана 40x24
+	.BYTE	14		; Clear screen
+	.BYTE	33,131,40,51	; Курсор в позицию
+	.BYTE	33,240,67	; Цвет символа
+	.ASCII	/L O D E    R U N N E R/<25><25>
+	.BYTE	33,131,66,45	; Курсор в позицию
+	.ASCII	/SCORE       LIVES     LEVEL /
+	.BYTE	33,240,64	; Цвет символа
+	.BYTE	0
+	.EVEN
+
+MENUSC:	; Строка подготовки экрана меню
+	.BYTE	33,246,62	; Формат экрана 40x24
+	.BYTE	33,240,67	; Цвет символа 67
+	.BYTE	33,241,65	; Цвет знакоместа 0
+	.BYTE	33,242,60	; Цвет фона 0
+	.BYTE	14		; Clear screen
+	.BYTE	33,131,67,107	; Курсор в позицию
+	.BYTE	0
+
+EXITSC:	; Строка очистки экрана перед выходом
+	.BYTE	33,246,061	; Формат экрана 80x24
+	.BYTE	33,240,67	; Цвет символа
+	.BYTE	33,241,61	; Цвет знакоместа 1
+	.BYTE	33,242,61	; Цвет фона 1
+	.BYTE	14		; Очистить экран
+	.ASCII	/BYE!/
+	.BYTE	0
+
+	.EVEN
+	
+KBDR:	.WORD	103		; код клавиши "вправо"
+KBDL:	.WORD	104		; код клавиши "влево"
+KBDU:	.WORD	101		; код клавиши "вверх"
+KBDD:	.WORD	102		; код клавиши "вниз"
+KBDE:	.WORD	40		; код клавиши "вырыть яму"
+	.EVEN
+
+ROOM:	.BYTE	0
+
+.EVEN
+
+.INCLUDE /DK:SP.MAC/
+
+
+
+
+
+
+DSPSTART:
+	.BLKW	440
+
+ROOMSTART:
+	.BLKW	40.
+
+.End	START
+;
